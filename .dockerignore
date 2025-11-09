@@ -28,6 +28,9 @@ easy-rsa/
 *.md
 !TEAMS_WEBHOOK.md
 
+# Example scripts (not needed in container)
+example_webhook_usage.py
+
 # IDE files
 .vscode
 .idea

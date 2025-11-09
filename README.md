@@ -172,6 +172,14 @@ Manage your OpenVPN certificates directly from Microsoft Teams! The Teams webhoo
 
 For complete setup instructions, usage examples, and troubleshooting, see [TEAMS_WEBHOOK.md](TEAMS_WEBHOOK.md).
 
+### Quick API Test
+
+Test the webhook API programmatically:
+```bash
+# Run the example script
+python3 example_webhook_usage.py
+```
+
 ## Tested Environment
 
 ✅ **Confirmed Working:**
