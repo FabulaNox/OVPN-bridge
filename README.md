@@ -9,6 +9,7 @@ A minimal, working OpenVPN server deployment with configuration file support and
 - **Auto-detection**: Automatically detects local network and public IP
 - **Client management**: Organized client output directory
 - **Proven working**: Based on tested TLS handshake solution
+- **🆕 Microsoft Teams Integration**: Manage certificates directly from Teams ([Documentation](TEAMS_WEBHOOK.md))
 
 ## Quick Start
 
@@ -141,6 +142,35 @@ sudo openvpn --config /etc/openvpn/server.conf --verb 4
 - Certificate files are excluded from git
 - Use certificate revocation for compromised devices
 - Regular certificate rotation recommended
+
+## Microsoft Teams Integration
+
+Manage your OpenVPN certificates directly from Microsoft Teams! The Teams webhook integration allows you to:
+
+- 🔐 **Generate certificates** through Teams commands
+- 📊 **Check certificate status** in real-time
+- ❌ **Revoke certificates** instantly
+- 🔒 **Secure communication** with HMAC signature verification
+
+### Quick Setup
+
+1. Install Python dependencies:
+   ```bash
+   pip3 install -r requirements.txt
+   ```
+
+2. Configure Teams webhook:
+   ```bash
+   cp .env.example .env
+   # Edit .env and set your TEAMS_WEBHOOK_SECRET
+   ```
+
+3. Start the webhook server:
+   ```bash
+   ./start-webhook.sh
+   ```
+
+For complete setup instructions, usage examples, and troubleshooting, see [TEAMS_WEBHOOK.md](TEAMS_WEBHOOK.md).
 
 ## Tested Environment
 

@@ -1,0 +1,43 @@
+# Git files
+.git
+.gitignore
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# OpenVPN generated files (will be mounted as volumes)
+openvpn-ca/
+clients/
+easy-rsa/
+
+# Documentation
+*.md
+!TEAMS_WEBHOOK.md
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

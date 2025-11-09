@@ -1,0 +1,20 @@
+[Unit]
+Description=OVPN Bridge Microsoft Teams Webhook Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/path/to/OVPN-bridge
+Environment="TEAMS_WEBHOOK_SECRET=change-me-to-your-secret"
+Environment="WEBHOOK_HOST=0.0.0.0"
+Environment="WEBHOOK_PORT=5000"
+Environment="WEBHOOK_DEBUG=False"
+ExecStart=/usr/bin/python3 /path/to/OVPN-bridge/teams_webhook.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
