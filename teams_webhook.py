@@ -11,6 +11,7 @@ import logging
 import subprocess
 import hmac
 import hashlib
+import re
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify
@@ -35,6 +36,42 @@ CLIENT_OUTPUT_DIR = "clients"
 # Load webhook secret from environment
 WEBHOOK_SECRET = os.environ.get('TEAMS_WEBHOOK_SECRET', '')
 
+# Security: Strict validation patterns
+CLIENT_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+IP_ADDRESS_PATTERN = re.compile(r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$')
+
+
+def validate_client_name(name: str) -> bool:
+    """
+    Validate client name for security
+    
+    Args:
+        name: Client name to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not name or len(name) > 64:
+        return False
+    return CLIENT_NAME_PATTERN.match(name) is not None
+
+
+def validate_ip_address(ip: str) -> bool:
+    """
+    Validate IP address format
+    
+    Args:
+        ip: IP address to validate
+        
+    Returns:
+        True if valid IP address, False otherwise
+    """
+    if not ip:
+        return True  # Empty IP is OK (auto-detect)
+    if ip.lower() == 'auto':
+        return True
+    return IP_ADDRESS_PATTERN.match(ip) is not None
+
 
 class CertificateManager:
     """Manages OpenVPN certificate operations"""
@@ -57,11 +94,18 @@ class CertificateManager:
             Dict with status and message
         """
         try:
-            # Validate client name (alphanumeric and hyphens only)
-            if not client_name.replace('-', '').replace('_', '').isalnum():
+            # Validate client name (strict security check)
+            if not validate_client_name(client_name):
                 return {
                     'success': False,
-                    'message': f'Invalid client name: {client_name}. Use only alphanumeric characters, hyphens, and underscores.'
+                    'message': 'Invalid client name. Use only alphanumeric characters, hyphens, and underscores (max 64 chars).'
+                }
+            
+            # Validate IP address if provided
+            if custom_ip and not validate_ip_address(custom_ip):
+                return {
+                    'success': False,
+                    'message': 'Invalid IP address format.'
                 }
             
             # Check if PKI directory exists
@@ -79,18 +123,22 @@ class CertificateManager:
                     'message': f'Certificate for {client_name} already exists. Use revoke first if you want to recreate it.'
                 }
             
-            # Build command
+            # Build command - using list to prevent injection
+            # Security Note: client_name and custom_ip are strictly validated with regex patterns
+            # before reaching this point, preventing command injection attacks
             cmd = [str(self.generate_script), client_name]
             if custom_ip:
                 cmd.append(custom_ip)
             
-            # Execute certificate generation
+            # Execute certificate generation with shell=False for security
+            # shell=False ensures arguments are passed directly without shell interpretation
             result = subprocess.run(
                 cmd,
                 cwd=str(self.script_dir),
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
+                shell=False  # Security: Never use shell=True with user input
             )
             
             if result.returncode == 0:
@@ -99,14 +147,14 @@ class CertificateManager:
                     'success': True,
                     'message': f'Certificate generated successfully for {client_name}',
                     'client_name': client_name,
-                    'ovpn_file': str(ovpn_file),
-                    'output': result.stdout
+                    'ovpn_file': str(ovpn_file)
                 }
             else:
+                # Don't expose full stderr to prevent information disclosure
+                logger.error(f"Certificate generation failed for {client_name}: {result.stderr}")
                 return {
                     'success': False,
-                    'message': f'Failed to generate certificate: {result.stderr}',
-                    'output': result.stderr
+                    'message': 'Failed to generate certificate. Check server logs for details.'
                 }
                 
         except subprocess.TimeoutExpired:
@@ -118,7 +166,7 @@ class CertificateManager:
             logger.exception("Error generating certificate")
             return {
                 'success': False,
-                'message': f'Error: {str(e)}'
+                'message': 'An error occurred while generating the certificate'
             }
     
     def list_certificates(self) -> Dict:
@@ -168,7 +216,13 @@ class CertificateManager:
                         "-noout",
                         "-subject", "-dates", "-serial"
                     ]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        shell=False  # Security: prevent command injection
+                    )
                     
                     if result.returncode == 0:
                         # Parse output
@@ -212,7 +266,7 @@ class CertificateManager:
             logger.exception("Error listing certificates")
             return {
                 'success': False,
-                'message': f'Error: {str(e)}'
+                'message': 'An error occurred while listing certificates'
             }
     
     def revoke_certificate(self, client_name: str) -> Dict:
@@ -226,11 +280,11 @@ class CertificateManager:
             Dict with status and message
         """
         try:
-            # Validate client name
-            if not client_name.replace('-', '').replace('_', '').isalnum():
+            # Validate client name (strict security check)
+            if not validate_client_name(client_name):
                 return {
                     'success': False,
-                    'message': f'Invalid client name: {client_name}'
+                    'message': 'Invalid client name'
                 }
             
             # Check if PKI directory exists
@@ -249,17 +303,21 @@ class CertificateManager:
                 }
             
             # Revoke certificate using easyrsa
+            # Security Note: client_name is strictly validated with regex pattern
+            # before reaching this point, preventing command injection attacks
             easyrsa_script = self.pki_dir / "easyrsa"
             cmd = [str(easyrsa_script), "revoke", client_name]
             
             # Run revocation command with 'yes' input
+            # shell=False ensures arguments are passed directly without shell interpretation
             result = subprocess.run(
                 cmd,
                 cwd=str(self.pki_dir),
                 input="yes\n",
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
+                shell=False  # Security: prevent command injection
             )
             
             if result.returncode == 0 or "already revoked" in result.stdout.lower():
@@ -270,20 +328,21 @@ class CertificateManager:
                     cwd=str(self.pki_dir),
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=30,
+                    shell=False  # Security: prevent command injection
                 )
                 
                 return {
                     'success': True,
                     'message': f'Certificate for {client_name} has been revoked',
-                    'client_name': client_name,
-                    'output': result.stdout
+                    'client_name': client_name
                 }
             else:
+                # Don't expose detailed error information
+                logger.error(f"Failed to revoke certificate for {client_name}: {result.stderr}")
                 return {
                     'success': False,
-                    'message': f'Failed to revoke certificate: {result.stderr}',
-                    'output': result.stderr
+                    'message': 'Failed to revoke certificate. Check server logs for details.'
                 }
                 
         except subprocess.TimeoutExpired:
@@ -295,7 +354,7 @@ class CertificateManager:
             logger.exception("Error revoking certificate")
             return {
                 'success': False,
-                'message': f'Error: {str(e)}'
+                'message': 'An error occurred while revoking the certificate'
             }
 
 
@@ -555,7 +614,7 @@ def teams_webhook():
         return jsonify({
             'response': format_teams_message(
                 'Error',
-                f'An error occurred: {str(e)}',
+                'An error occurred while processing your request',
                 color="E81123"
             )
         }), 500
@@ -564,34 +623,55 @@ def teams_webhook():
 @app.route('/api/certificates', methods=['GET'])
 def api_list_certificates():
     """REST API endpoint to list certificates"""
-    result = cert_manager.list_certificates()
-    return jsonify(result)
+    try:
+        result = cert_manager.list_certificates()
+        return jsonify(result)
+    except Exception as e:
+        logger.exception("Error in api_list_certificates")
+        return jsonify({
+            'success': False,
+            'message': 'An error occurred while listing certificates'
+        }), 500
 
 
 @app.route('/api/certificates', methods=['POST'])
 def api_generate_certificate():
     """REST API endpoint to generate certificate"""
-    data = request.get_json()
-    
-    if not data or 'client_name' not in data:
-        return jsonify({'error': 'client_name is required'}), 400
-    
-    client_name = data['client_name']
-    custom_ip = data.get('custom_ip')
-    
-    result = cert_manager.generate_certificate(client_name, custom_ip)
-    status_code = 200 if result['success'] else 400
-    
-    return jsonify(result), status_code
+    try:
+        data = request.get_json()
+        
+        if not data or 'client_name' not in data:
+            return jsonify({'error': 'client_name is required'}), 400
+        
+        client_name = data['client_name']
+        custom_ip = data.get('custom_ip')
+        
+        result = cert_manager.generate_certificate(client_name, custom_ip)
+        status_code = 200 if result['success'] else 400
+        
+        return jsonify(result), status_code
+    except Exception as e:
+        logger.exception("Error in api_generate_certificate")
+        return jsonify({
+            'success': False,
+            'message': 'An error occurred while generating the certificate'
+        }), 500
 
 
 @app.route('/api/certificates/<client_name>', methods=['DELETE'])
 def api_revoke_certificate(client_name: str):
     """REST API endpoint to revoke certificate"""
-    result = cert_manager.revoke_certificate(client_name)
-    status_code = 200 if result['success'] else 400
-    
-    return jsonify(result), status_code
+    try:
+        result = cert_manager.revoke_certificate(client_name)
+        status_code = 200 if result['success'] else 400
+        
+        return jsonify(result), status_code
+    except Exception as e:
+        logger.exception("Error in api_revoke_certificate")
+        return jsonify({
+            'success': False,
+            'message': 'An error occurred while revoking the certificate'
+        }), 500
 
 
 if __name__ == '__main__':
