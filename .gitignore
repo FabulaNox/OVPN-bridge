@@ -1,0 +1,40 @@
+# OpenVPN sensitive files - NEVER commit these
+*.crt
+*.key
+*.pem
+ta.key
+
+# Client certificates (loose files - not embedded in .ovpn)
+clients/*.crt
+clients/*.key
+clients/ta.key
+
+# Note: Scripts automatically clean up ALL files after generation
+# Repository stays clean - only newly generated .ovpn files remain temporarily
+
+# PKI directory with all certificates
+openvpn-ca/
+pki/
+
+# Server configuration files that may contain sensitive data
+/etc/openvpn/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Demo and temporary files
+*demo*
+*Demo*
+*DEMO*
+demo-*
+DEMO-*
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp

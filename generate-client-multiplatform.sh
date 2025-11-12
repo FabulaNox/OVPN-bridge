@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Multi-Platform OpenVPN Client Generator
-# Supports Windows, Linux, macOS, Android, and iOS with OS-specific configurations
+# Supports Windows, Linux, macOS, Android, iOS, and Kali Linux with OS-specific configurations
+# Perfect for demos and automated guest certificate generation
 
 set -e
 
@@ -18,7 +19,7 @@ fi
 source "$CONFIG_FILE"
 
 # Set paths
-PKI_DIR="$SCRIPT_DIR/$PKI_DIR_NAME"
+PKI_DIR="/home/bogdan/$PKI_DIR_NAME"
 CLIENT_DIR="$SCRIPT_DIR/$CLIENT_OUTPUT_DIR"
 
 # Colors for output
@@ -63,8 +64,9 @@ show_os_menu() {
     echo "4) Android (OpenVPN for Android optimized)"
     echo "5) iOS (OpenVPN Connect optimized)"
     echo "6) Generic (Standard split-tunnel .ovpn)"
+    echo -e "${GREEN}7) Kali Linux (Penetration testing optimized)${NC}"
     echo ""
-    read -p "Enter your choice (1-6): " os_choice
+    read -p "Enter your choice (1-7): " os_choice
     echo ""
 }
 
@@ -249,6 +251,71 @@ EOF
     chmod 600 "$output_file"
     print_success "Linux configuration created: $output_file"
     print_status "For NetworkManager: Import this file through Settings > Network > VPN"
+}
+
+create_kali_config() {
+    local client_name="$1"
+    local output_file="$CLIENT_DIR/${client_name}-kali.ovpn"
+    
+    print_status "Creating Kali Linux configuration (Penetration testing optimized)..."
+    
+    cat > "$output_file" << EOF
+# Kali Linux OpenVPN Configuration - Penetration Testing Optimized
+# Split tunneling: Only target server network traffic goes through tunnel
+# Perfect for demos and automated guest access generation
+client
+dev tun
+proto $VPN_PROTOCOL
+remote $SERVER_IP $VPN_PORT
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+cipher $CIPHER
+auth $AUTH
+key-direction 1
+verb 3
+remote-cert-tls server
+tls-version-min 1.2
+
+# Kali-specific optimizations for penetration testing
+pull-filter ignore "redirect-gateway"
+pull-filter ignore "dhcp-option DNS"
+route-nopull
+
+# Split tunneling: Only route specific server for demo/testing
+route $VPN_NETWORK 255.255.255.0
+
+# Kali Linux networking optimizations
+script-security 2
+fast-io
+compress lz4-v2
+ping 10
+ping-restart 30
+
+# Demo-friendly: Quick connection, stable tunnel
+auth-retry interact
+connect-retry-max 3
+connect-timeout 10
+
+# Embedded certificates for zero-config deployment
+<ca>
+$(cat "$PKI_DIR/pki/ca.crt")
+</ca>
+<cert>
+$(cat "$PKI_DIR/pki/issued/$client_name.crt")
+</cert>
+<key>
+$(cat "$PKI_DIR/pki/private/$client_name.key")
+</key>
+<tls-auth>
+$(cat "$PKI_DIR/ta.key")
+</tls-auth>
+EOF
+
+    chmod 600 "$output_file"
+    print_success "Kali Linux configuration created: $output_file"
+    print_status "Perfect for demos! Copy to /etc/openvpn/client/ or use with openvpn --config"
 }
 
 create_macos_config() {
@@ -533,6 +600,49 @@ Troubleshooting:
 - Verify: systemctl status NetworkManager
 EOF
             ;;
+        kali)
+            cat > "$instructions_file" << EOF
+OpenVPN Setup Instructions for Kali Linux
+=========================================
+
+Perfect for Penetration Testing Demos & Automated Guest Access
+
+Quick Setup (Command Line):
+1. sudo openvpn ${client_name}-kali.ovpn
+   Or copy to: /etc/openvpn/client/${client_name}-kali.conf
+2. Service mode: sudo systemctl start openvpn-client@${client_name}-kali
+
+Demo-Ready Features:
+✅ Zero configuration - embedded certificates
+✅ Split tunneling - only target server access
+✅ Fast connection with stable tunnel
+✅ Perfect for automated guest certificate generation
+✅ Optimized for presentation scenarios
+
+Advanced Setup (NetworkManager):
+1. sudo apt install network-manager-openvpn-gnome
+2. Import through GUI: Settings > Network > VPN > Import
+3. Or command: nmcli connection import type openvpn file ${client_name}-kali.ovpn
+
+Hook for Future Automation:
+This configuration demonstrates on-demand certificate generation capability.
+Perfect foundation for webhook-based automated guest access systems.
+
+Penetration Testing Optimizations:
+- Only routes to target server network ($VPN_NETWORK)
+- Internet traffic stays local (prevents detection)
+- Fast connection establishment for time-sensitive testing
+- Embedded certificates for zero-dependency deployment
+
+Connection Verification:
+- Check route: ip route | grep $VPN_NETWORK
+- Test access: ssh user@server_ip_through_vpn
+- Verify split: curl ipinfo.io (should show local IP)
+
+Perfect for ELK Stack Demos:
+Connect VPN → SSH access → RDP GUI → ELK Dashboard presentation
+EOF
+            ;;
         macos)
             cat > "$instructions_file" << EOF
 OpenVPN Setup Instructions for macOS
@@ -635,6 +745,29 @@ EOF
     fi
 }
 
+# Security cleanup function - removes ALL sensitive and unnecessary files after generation
+cleanup_sensitive_files() {
+    local client_name="$1"
+    
+    print_status "🔒 Security cleanup: Removing sensitive and unnecessary files..."
+    
+    # Remove ALL certificate files from clients directory
+    rm -f "$CLIENT_DIR"/*.crt "$CLIENT_DIR"/*.key "$CLIENT_DIR"/ta.key 2>/dev/null
+    rm -f "$CLIENT_DIR"/server.crt "$CLIENT_DIR"/ca.crt 2>/dev/null
+    
+    # Remove ALL setup instruction files (.txt) - not needed for automation
+    rm -f "$CLIENT_DIR"/*.txt 2>/dev/null
+    
+    # Remove any old .ovpn files except the one we just created
+    find "$CLIENT_DIR" -name "*.ovpn" ! -name "${client_name}*.ovpn" -delete 2>/dev/null
+    
+    print_success "🔒 All sensitive and unnecessary files cleaned up"
+    
+    # Show what files remain (should only be the new .ovpn file)
+    echo -e "${CYAN}Files remaining in output directory:${NC}"
+    ls -la "$CLIENT_DIR"/*.ovpn 2>/dev/null | awk '{print "  " $9}' || echo "  (no files)"
+}
+
 # Main execution
 main() {
     print_header
@@ -665,36 +798,41 @@ main() {
     # Create OS-specific configuration
     case $OS_CHOICE in
         1)
-            create_windows_config "$CLIENT_NAME"
-            create_setup_instructions "$CLIENT_NAME" "windows"
+            create_windows_config "$CLIENT_NAME" 
+            # create_setup_instructions "$CLIENT_NAME" "windows" # Deleted by cleanup
             OS_NAME="Windows"
             ;;
         2)
             create_linux_config "$CLIENT_NAME"
-            create_setup_instructions "$CLIENT_NAME" "linux"
+            # create_setup_instructions "$CLIENT_NAME" "linux" # Deleted by cleanup
             OS_NAME="Linux"
             ;;
         3)
             create_macos_config "$CLIENT_NAME"
-            create_setup_instructions "$CLIENT_NAME" "macos"
+            # create_setup_instructions "$CLIENT_NAME" "macos" # Deleted by cleanup
             OS_NAME="macOS"
             ;;
         4)
             create_android_config "$CLIENT_NAME"
-            create_setup_instructions "$CLIENT_NAME" "android"
+            # create_setup_instructions "$CLIENT_NAME" "android" # Deleted by cleanup
             OS_NAME="Android"
             ;;
         5)
             create_ios_config "$CLIENT_NAME"
-            create_setup_instructions "$CLIENT_NAME" "ios"
+            # create_setup_instructions "$CLIENT_NAME" "ios" # Deleted by cleanup
             OS_NAME="iOS"
             ;;
         6)
             create_generic_config "$CLIENT_NAME"
             OS_NAME="Generic"
             ;;
+        7)
+            create_kali_config "$CLIENT_NAME"
+            # create_setup_instructions "$CLIENT_NAME" "kali" # Deleted by cleanup
+            OS_NAME="Kali Linux"
+            ;;
         *)
-            print_error "Invalid choice. Please select 1-6."
+            print_error "Invalid choice. Please select 1-7."
             exit 1
             ;;
     esac
@@ -715,10 +853,11 @@ main() {
     echo "• Embedded certificates for easy deployment"
     echo "• Optimized for Linux server environment"
     
-    if [[ $OS_CHOICE != 6 ]]; then
-        print_status "Setup instructions included in the output directory"
-    fi
+    # Setup instructions disabled - files cleaned up automatically
     print_status "Ensure port $VPN_PORT/$VPN_PROTOCOL is forwarded on your router"
+    
+    # Automatically clean up sensitive files for security
+    cleanup_sensitive_files "$CLIENT_NAME"
 }
 
 # Show usage if no arguments and not interactive

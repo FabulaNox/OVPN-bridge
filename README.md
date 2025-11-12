@@ -19,7 +19,7 @@ Edit `config.conf` to customize your setup:
 ```bash
 # Network settings
 VPN_NETWORK="10.8.0.0"
-VPN_PORT="1194"
+VPN_PORT="61123"
 
 # Certificate settings  
 CERT_COUNTRY="US"
@@ -141,12 +141,6 @@ Configure port forwarding:
 - **External Port**: Your configured VPN port/UDP (default: 1194)
 - **Internal IP**: Your server's local IP address
 - **Internal Port**: Same as external port
-
-### Firewall
-The deployment script automatically:
-- Opens required port in UFW
-- Enables IP forwarding
-- Configures basic rules
 
 ## Troubleshooting
 

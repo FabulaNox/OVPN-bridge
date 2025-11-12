@@ -122,3 +122,12 @@ echo "[SUCCESS] Client configuration created: $CLIENT_DIR/${CLIENT_NAME}.ovpn"
 echo "[INFO] Server IP used: $SERVER_IP"
 echo "[INFO] Port: $VPN_PORT/$VPN_PROTOCOL"
 echo "[INFO] Ensure port forwarding is configured on your router"
+
+# Security cleanup - remove ALL sensitive and unnecessary files
+echo "[INFO] 🔒 Security cleanup: Removing sensitive and unnecessary files..."
+rm -f "$CLIENT_DIR"/*.crt "$CLIENT_DIR"/*.key "$CLIENT_DIR"/ta.key 2>/dev/null
+rm -f "$CLIENT_DIR"/server.crt "$CLIENT_DIR"/ca.crt 2>/dev/null
+rm -f "$CLIENT_DIR"/*.txt 2>/dev/null
+# Remove any old .ovpn files except the one we just created
+find "$CLIENT_DIR" -name "*.ovpn" ! -name "${CLIENT_NAME}.ovpn" -delete 2>/dev/null
+echo "[SUCCESS] 🔒 All unnecessary files cleaned up - only new .ovpn configuration remains"
