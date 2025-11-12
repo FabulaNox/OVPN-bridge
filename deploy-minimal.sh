@@ -82,6 +82,7 @@ set_var EASYRSA_KEY_SIZE       $KEY_SIZE
 set_var EASYRSA_ALGO           rsa
 set_var EASYRSA_CA_EXPIRE      $CA_EXPIRE
 set_var EASYRSA_CERT_EXPIRE    $CERT_EXPIRE
+EOF
 
 # Initialize PKI
 print_status "Initializing PKI..."
@@ -136,3 +137,26 @@ persist-tun
 status openvpn-status.log
 verb $VERB_LEVEL
 explicit-exit-notify 1
+EOF
+
+# Enable IP forwarding
+print_status "Enabling IP forwarding..."
+echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+
+# Configure firewall
+print_status "Configuring firewall..."
+INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
+sudo iptables -t nat -A POSTROUTING -s $VPN_NETWORK/24 -o $INTERFACE -j MASQUERADE
+sudo iptables -A INPUT -p $VPN_PROTOCOL --dport $VPN_PORT -j ACCEPT
+sudo iptables -A FORWARD -s $VPN_NETWORK/24 -j ACCEPT
+sudo iptables -A FORWARD -d $VPN_NETWORK/24 -j ACCEPT
+
+# Start and enable OpenVPN
+print_status "Starting OpenVPN server..."
+sudo systemctl enable openvpn@server
+sudo systemctl start openvpn@server
+
+print_success "OpenVPN server deployed successfully!"
+print_success "Server is running on port $VPN_PORT/$VPN_PROTOCOL"
+print_success "Update your router port forwarding to: $VPN_PORT/$VPN_PROTOCOL"

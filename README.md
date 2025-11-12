@@ -1,14 +1,16 @@
-# OpenVPN Bridge - Configurable Solution
+# OpenVPN Bridge - Multi-Platform VPN Solution
 
-A minimal, working OpenVPN server deployment with configuration file support and relative paths.
+A configurable OpenVPN server deployment with multi-platform client generation, featuring split tunneling and platform-specific optimizations.
 
 ## Features
 
-- **Configuration-driven**: All settings in `config.conf`
-- **Relative paths**: Works from any directory
+- **Multi-platform clients**: Windows, Linux, macOS, Android, iOS, and generic configurations
+- **Split tunneling**: Only VPN network traffic routed through tunnel (internet stays local)
+- **Configuration-driven**: All settings centralized in `config.conf`
+- **Platform optimizations**: OS-specific DNS leak protection and compatibility
 - **Auto-detection**: Automatically detects local network and public IP
-- **Client management**: Organized client output directory
-- **Proven working**: Based on tested TLS handshake solution
+- **Client management**: Organized client output with setup instructions
+- **Tested and proven**: Verified working on Windows platform
 
 ## Quick Start
 
@@ -32,34 +34,48 @@ CERT_ORG="Your Organization"
 ```
 
 ### 3. Generate Client Certificates
+
+**Multi-platform generator (recommended):**
+```bash
+# Interactive mode - choose platform and settings
+./generate-client-multiplatform.sh
+
+# Command line mode
+./generate-client-multiplatform.sh laptop auto 1  # Windows client
+./generate-client-multiplatform.sh phone auto 4   # Android client
+```
+
+**Simple generator:**
 ```bash
 # Auto-detect public IP
 ./generate-minimal-client.sh laptop
 
 # Use specific IP
-./generate-minimal-client.sh office-pc 203.0.113.1
-
-# Update existing client IP
-./generate-minimal-client.sh laptop 203.0.113.2
+./generate-minimal-client.sh office-pc YOUR.SERVER.IP
 ```
 
 ### 4. Use Client Configuration
-- Client files are saved to `./clients/`
-- Transfer `.ovpn` file to client device
-- Import and connect with OpenVPN client
+- Client files are saved to `./clients/` with platform-specific names
+- Each client includes setup instructions file
+- Transfer `.ovpn` file to target device
+- Import with platform-specific OpenVPN client
 
 ## File Structure
 
 ```
-OVPN bridge/
-├── config.conf                 # 🔧 Configuration file
-├── deploy-minimal.sh           # 🚀 Server deployment
-├── generate-minimal-client.sh  # 👤 Client generation
-├── README.md                   # 📄 Documentation
-├── clients/                    # 📁 Generated client configs
-│   ├── laptop.ovpn
-│   └── phone.ovpn
-└── openvpn-ca/                 # 🔐 Certificate Authority
+OVPN-bridge/
+├── config.conf                       # 🔧 Configuration file
+├── deploy-minimal.sh                 # 🚀 Server deployment
+├── generate-client-multiplatform.sh  # 👥 Multi-platform client generator
+├── generate-minimal-client.sh        # 👤 Simple client generation
+├── README.md                         # 📄 Documentation
+├── MULTIPLATFORM.md                  # 📱 Platform-specific guides
+├── clients/                          # 📁 Generated client configs
+│   ├── laptop-windows.ovpn
+│   ├── laptop-windows-setup.txt
+│   ├── phone-android.ovpn
+│   └── phone-android-setup.txt
+└── openvpn-ca/                       # 🔐 Certificate Authority
     └── pki/
 ```
 
@@ -84,13 +100,29 @@ OVPN bridge/
 
 ## Client Management
 
-### Generate new client:
+### Multi-Platform Client Generation
+
+**Interactive mode (recommended):**
+```bash
+./generate-client-multiplatform.sh
+```
+- Choose platform (Windows, Linux, macOS, Android, iOS, Generic)
+- Auto-detects server IP or allows custom IP
+- Generates platform-specific configuration
+- Creates setup instruction files
+
+**Command line mode:**
+```bash
+./generate-client-multiplatform.sh <name> <ip> <platform>
+# Platform options: 1=Windows, 2=Linux, 3=macOS, 4=Android, 5=iOS, 6=Generic
+```
+
+### Simple Client Generation
+
+**Basic generation:**
 ```bash
 ./generate-minimal-client.sh <name> [ip]
 ```
-
-### Update existing client IP:
-When generating for existing client, script will offer to update IP only
 
 ### List clients:
 ```bash
@@ -106,9 +138,9 @@ openssl x509 -in openvpn-ca/pki/issued/client-name.crt -noout -dates
 
 ### Router Configuration
 Configure port forwarding:
-- **External Port**: 1194/UDP (or your configured port)
-- **Internal IP**: Your server's local IP
-- **Internal Port**: 1194/UDP
+- **External Port**: Your configured VPN port/UDP (default: 1194)
+- **Internal IP**: Your server's local IP address
+- **Internal Port**: Same as external port
 
 ### Firewall
 The deployment script automatically:
@@ -126,8 +158,8 @@ sudo journalctl -u openvpn@server -f
 
 ### Test connectivity:
 ```bash
-sudo netstat -ulnp | grep 1194
-sudo tcpdump -i any port 1194
+sudo netstat -ulnp | grep <YOUR_VPN_PORT>
+sudo tcpdump -i any port <YOUR_VPN_PORT>
 ```
 
 ### Verify configuration:
@@ -142,10 +174,23 @@ sudo openvpn --config /etc/openvpn/server.conf --verb 4
 - Use certificate revocation for compromised devices
 - Regular certificate rotation recommended
 
-## Tested Environment
+## Platform Support Status
 
-✅ **Confirmed Working:**
-- Server: OpenVPN 2.6.14 on Ubuntu
-- Client: Windows OpenVPN GUI
-- Connection: External (mobile hotspot → router → server)
-- Result: Successful TLS handshake and VPN tunnel
+### ✅ Tested and Working:
+- **Windows**: OpenVPN GUI - Full functionality confirmed
+  - Split tunneling operational
+  - Certificate generation working
+  - External connectivity verified
+  - DNS leak protection active
+
+### 🔄 Pending Testing:
+- **Linux**: NetworkManager/OpenVPN integration
+- **macOS**: Tunnelblick compatibility  
+- **Android**: OpenVPN for Android app
+- **iOS**: OpenVPN Connect app
+
+### 📋 Server Tested On:
+- Ubuntu 24.04 LTS
+- OpenVPN 2.6.14
+- RouterOS 7.x (MikroTik) port forwarding
+- External connectivity validation

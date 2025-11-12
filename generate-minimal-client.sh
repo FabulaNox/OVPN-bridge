@@ -29,7 +29,7 @@ if [ -z "$CLIENT_NAME" ]; then
     echo ""
     echo "Examples:"
     echo "  $0 laptop                    # Auto-detect public IP"
-    echo "  $0 phone 192.168.1.100      # Use specific IP"
+    echo "  $0 phone YOUR.SERVER.IP      # Use specific IP"
     echo "  $0 office auto               # Auto-detect public IP"
     exit 1
 fi

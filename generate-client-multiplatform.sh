@@ -112,6 +112,9 @@ generate_certificate() {
     
     cd "$PKI_DIR"
     
+    # Remove any existing lock file
+    rm -f pki/lock.file 2>/dev/null || true
+    
     # Check if client already exists
     if [[ -f "pki/issued/${client_name}.crt" ]]; then
         print_warning "Certificate for $client_name already exists"
@@ -121,15 +124,20 @@ generate_certificate() {
             print_status "Using existing certificate"
             return 0
         fi
-        # Remove existing certificate
+        # Remove existing certificate files
         rm -f "pki/issued/${client_name}.crt"
         rm -f "pki/private/${client_name}.key"
         rm -f "pki/reqs/${client_name}.req"
     fi
     
     print_status "Generating certificate for $client_name..."
-    ./easyrsa gen-req "$client_name" nopass >/dev/null 2>&1
-    echo "yes" | ./easyrsa sign-req client "$client_name" >/dev/null 2>&1
+    
+    # Generate certificate request (non-interactive)
+    echo "$client_name" | ./easyrsa gen-req "$client_name" nopass
+    
+    # Sign the certificate (non-interactive)
+    echo "yes" | ./easyrsa sign-req client "$client_name"
+    
     print_success "Certificate generated successfully"
 }
 
@@ -733,7 +741,7 @@ if [[ $# -eq 0 && ! -t 0 ]]; then
     echo "Examples:"
     echo "  $0                           # Interactive mode"
     echo "  $0 laptop auto 1             # Windows client with auto-detected IP"
-    echo "  $0 phone 192.168.1.100 4     # Android client with specific IP"
+    echo "  $0 phone YOUR.SERVER.IP 4    # Android client with specific IP"
     exit 1
 fi
 
