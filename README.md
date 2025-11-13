@@ -17,13 +17,16 @@ A configurable OpenVPN server deployment with multi-platform client generation, 
 ### 1. Configure Settings
 Edit `config.conf` to customize your setup:
 ```bash
-# Network settings
+# Network settings (auto-detected if not specified)
 VPN_NETWORK="10.8.0.0"
-VPN_PORT="61123"
+VPN_PORT="1194"
+LOCAL_NETWORK=""        # Auto-detected
+SERVER_LOCAL_IP=""      # Auto-detected
 
 # Certificate settings  
 CERT_COUNTRY="US"
-CERT_ORG="Your Organization"
+CERT_ORG="YourOrganization"
+CERT_EMAIL="admin@yourorg.com"
 
 # See config.conf for all options
 ```
@@ -85,7 +88,8 @@ OVPN-bridge/
 - `VPN_NETWORK`: VPN subnet (default: 10.8.0.0)
 - `VPN_PORT`: OpenVPN port (default: 1194)
 - `VPN_PROTOCOL`: Protocol (default: udp)
-- `LOCAL_NETWORK`: Local network to route (auto-detected)
+- `LOCAL_NETWORK`: Local network to route (auto-detected if empty)
+- `SERVER_LOCAL_IP`: Server's local IP for routing (auto-detected if empty)
 
 ### Certificate Settings
 - `CERT_COUNTRY`, `CERT_PROVINCE`, `CERT_CITY`: Certificate location
@@ -138,16 +142,16 @@ openssl x509 -in openvpn-ca/pki/issued/client-name.crt -noout -dates
 
 ### Router Configuration
 Configure port forwarding:
-- **External Port**: Your configured VPN port/UDP (default: 1194)
-- **Internal IP**: Your server's local IP address
+- **External Port**: Your configured VPN port/UDP (configurable in `config.conf`)
+- **Internal IP**: Your server's local IP address (auto-detected during deployment)
 - **Internal Port**: Same as external port
 
 ## Troubleshooting
 
 ### Check server status:
 ```bash
-sudo systemctl status openvpn@server
-sudo journalctl -u openvpn@server -f
+sudo systemctl status openvpn-server@server
+sudo journalctl -u openvpn-server@server -f
 ```
 
 ### Test connectivity:
@@ -158,7 +162,7 @@ sudo tcpdump -i any port <YOUR_VPN_PORT>
 
 ### Verify configuration:
 ```bash
-sudo openvpn --config /etc/openvpn/server.conf --verb 4
+sudo openvpn --config /etc/openvpn/server/server.conf --verb 4
 ```
 
 ## Security Notes

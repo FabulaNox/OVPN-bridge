@@ -8,6 +8,7 @@ set -e
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.conf"
+LOCAL_CONFIG_FILE="$SCRIPT_DIR/config.local.conf"
 
 # Load configuration
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -15,16 +16,29 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
+# shellcheck source=config.conf
 source "$CONFIG_FILE"
+
+# Load local overrides if they exist
+if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
+    echo "[INFO] Loading local configuration overrides..."
+    # shellcheck source=config.local.conf
+    source "$LOCAL_CONFIG_FILE"
+fi
 
 # Set relative paths
 PKI_DIR="$SCRIPT_DIR/$PKI_DIR_NAME"
 CLIENT_DIR="$SCRIPT_DIR/$CLIENT_OUTPUT_DIR"
 
-# Auto-detect local network if not configured
+# Auto-detect network settings if not configured
+INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
+
 if [[ -z "$LOCAL_NETWORK" ]]; then
-    INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
-    LOCAL_NETWORK=$(ip route | grep "$INTERFACE" | grep -E '192\.168\.|10\.|172\.' | head -1 | awk '{print $1}' | head -1)
+    LOCAL_NETWORK=$(ip route | grep "$INTERFACE" | grep -v default | grep -E '192\.168\.|10\.|172\.' | head -1 | awk '{print $1}')
+fi
+
+if [[ -z "$SERVER_LOCAL_IP" ]]; then
+    SERVER_LOCAL_IP=$(ip addr show "$INTERFACE" | grep "inet " | awk '{print $2}' | cut -d'/' -f1)
 fi
 
 print_status() {
@@ -42,6 +56,8 @@ print_config() {
     echo "VPN Network: $VPN_NETWORK/$VPN_NETMASK"
     echo "Port: $VPN_PORT/$VPN_PROTOCOL"
     echo "Local Network: $LOCAL_NETWORK"
+    echo "Server Local IP: $SERVER_LOCAL_IP"
+    echo "Interface: $INTERFACE"
     echo "PKI Directory: $PKI_DIR"
     echo "Client Output: $CLIENT_DIR"
     echo "=========================================="
@@ -52,13 +68,14 @@ print_config
 
 # Stop existing server
 print_status "Stopping existing OpenVPN server..."
+sudo systemctl stop openvpn-server@server 2>/dev/null || true
 sudo systemctl stop openvpn@server 2>/dev/null || true
 
 # Clean previous installation
 print_status "Cleaning previous installation..."
-sudo rm -rf $OPENVPN_DIR/*
-rm -rf $PKI_DIR
-rm -rf $SCRIPT_DIR/easy-rsa
+sudo rm -rf "$OPENVPN_DIR"/*
+rm -rf "$PKI_DIR"
+rm -rf "$SCRIPT_DIR"/easy-rsa
 
 # Create client output directory
 mkdir -p "$CLIENT_DIR"
@@ -107,15 +124,15 @@ openvpn --genkey secret ta.key
 
 # Copy certificates to OpenVPN directory
 print_status "Copying certificates..."
-sudo cp pki/ca.crt $OPENVPN_DIR/
-sudo cp pki/issued/server.crt $OPENVPN_DIR/
-sudo cp pki/private/server.key $OPENVPN_DIR/
-sudo cp pki/dh.pem $OPENVPN_DIR/
-sudo cp ta.key $OPENVPN_DIR/
+sudo cp pki/ca.crt "$OPENVPN_DIR"/
+sudo cp pki/issued/server.crt "$OPENVPN_DIR"/
+sudo cp pki/private/server.key "$OPENVPN_DIR"/
+sudo cp pki/dh.pem "$OPENVPN_DIR"/
+sudo cp ta.key "$OPENVPN_DIR"/
 
 # Create server configuration
 print_status "Creating server configuration..."
-sudo tee $OPENVPN_DIR/server.conf > /dev/null << EOF
+sudo tee "$OPENVPN_DIR"/server.conf > /dev/null << EOF
 port $VPN_PORT
 proto $VPN_PROTOCOL
 dev tun
@@ -125,7 +142,7 @@ key server.key
 dh dh.pem
 server $VPN_NETWORK $VPN_NETMASK
 ifconfig-pool-persist ipp.txt
-push "route $LOCAL_NETWORK"
+push "route $SERVER_LOCAL_IP 255.255.255.255"
 keepalive 10 120
 tls-auth ta.key 0
 cipher $CIPHER
@@ -141,21 +158,29 @@ EOF
 
 # Enable IP forwarding
 print_status "Enabling IP forwarding..."
-echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+if ! grep -q "net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+    echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+fi
 sudo sysctl -p
 
-# Configure firewall
-print_status "Configuring firewall..."
+# Configure firewall with UFW
+print_status "Configuring UFW firewall..."
+sudo ufw allow "$VPN_PORT"/"$VPN_PROTOCOL" comment "OpenVPN"
+
+# Enable IP masquerading for VPN clients (check if rule already exists)
+print_status "Configuring IP masquerading..."
 INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
-sudo iptables -t nat -A POSTROUTING -s $VPN_NETWORK/24 -o $INTERFACE -j MASQUERADE
-sudo iptables -A INPUT -p $VPN_PROTOCOL --dport $VPN_PORT -j ACCEPT
-sudo iptables -A FORWARD -s $VPN_NETWORK/24 -j ACCEPT
-sudo iptables -A FORWARD -d $VPN_NETWORK/24 -j ACCEPT
+if ! sudo iptables -t nat -C POSTROUTING -s "$VPN_NETWORK"/24 -o "$INTERFACE" -j MASQUERADE 2>/dev/null; then
+    sudo iptables -t nat -A POSTROUTING -s "$VPN_NETWORK"/24 -o "$INTERFACE" -j MASQUERADE
+    print_status "Added MASQUERADE rule for $VPN_NETWORK/24 on $INTERFACE"
+else
+    print_status "MASQUERADE rule already exists for $VPN_NETWORK/24 on $INTERFACE"
+fi
 
 # Start and enable OpenVPN
 print_status "Starting OpenVPN server..."
-sudo systemctl enable openvpn@server
-sudo systemctl start openvpn@server
+sudo systemctl enable openvpn-server@server
+sudo systemctl start openvpn-server@server
 
 print_success "OpenVPN server deployed successfully!"
 print_success "Server is running on port $VPN_PORT/$VPN_PROTOCOL"

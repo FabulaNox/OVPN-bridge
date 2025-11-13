@@ -38,3 +38,34 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Local deployment files and utilities
+cleanup-artifacts.sh
+config-manager.sh
+dev-manager.sh
+*.local.conf
+config.local.conf
+config.local.conf.template
+
+# Development versions of scripts
+*.dev.sh
+
+# Development documentation (local only)
+DEVELOPMENT.md
+
+# Development and testing artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Generated client files that might contain sensitive data
+clients/*.ovpn
+*.ovpn
+
+# System and environment files
+.env
+.env.local
+.DS_Store
+Thumbs.db

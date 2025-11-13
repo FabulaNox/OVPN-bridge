@@ -9,6 +9,7 @@ set -e
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.conf"
+LOCAL_CONFIG_FILE="$SCRIPT_DIR/config.local.conf"
 
 # Load configuration
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -16,10 +17,17 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
+# shellcheck source=config.conf
 source "$CONFIG_FILE"
 
+# Load local overrides if they exist
+if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
+    # shellcheck source=config.local.conf
+    source "$LOCAL_CONFIG_FILE"
+fi
+
 # Set paths
-PKI_DIR="/home/bogdan/$PKI_DIR_NAME"
+PKI_DIR="$SCRIPT_DIR/$PKI_DIR_NAME"
 CLIENT_DIR="$SCRIPT_DIR/$CLIENT_OUTPUT_DIR"
 
 # Colors for output
@@ -66,13 +74,13 @@ show_os_menu() {
     echo "6) Generic (Standard split-tunnel .ovpn)"
     echo -e "${GREEN}7) Kali Linux (Penetration testing optimized)${NC}"
     echo ""
-    read -p "Enter your choice (1-7): " os_choice
+    read -r -p "Enter your choice (1-7): " os_choice
     echo ""
 }
 
 get_client_name() {
     if [ -z "$1" ]; then
-        read -p "Enter client name: " CLIENT_NAME
+        read -r -p "Enter client name: " CLIENT_NAME
     else
         CLIENT_NAME="$1"
     fi
@@ -93,7 +101,7 @@ get_server_ip() {
         SERVER_IP=$(curl -s ipinfo.io/ip 2>/dev/null || curl -s ifconfig.me 2>/dev/null || echo "YOUR_PUBLIC_IP")
         if [[ "$SERVER_IP" == "YOUR_PUBLIC_IP" ]]; then
             print_warning "Could not auto-detect public IP"
-            read -p "Enter your server's public IP address: " SERVER_IP
+            read -r -p "Enter your server's public IP address: " SERVER_IP
         fi
     fi
     print_status "Using server IP: $SERVER_IP"
@@ -765,7 +773,7 @@ cleanup_sensitive_files() {
     
     # Show what files remain (should only be the new .ovpn file)
     echo -e "${CYAN}Files remaining in output directory:${NC}"
-    ls -la "$CLIENT_DIR"/*.ovpn 2>/dev/null | awk '{print "  " $9}' || echo "  (no files)"
+    find "$CLIENT_DIR" -name "*.ovpn" -printf "  %f\\n" 2>/dev/null || echo "  (no files)"
 }
 
 # Main execution

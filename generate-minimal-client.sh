@@ -8,6 +8,7 @@ set -e
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.conf"
+LOCAL_CONFIG_FILE="$SCRIPT_DIR/config.local.conf"
 
 # Load configuration
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -15,7 +16,14 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
+# shellcheck source=config.conf
 source "$CONFIG_FILE"
+
+# Load local overrides if they exist
+if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
+    # shellcheck source=config.local.conf
+    source "$LOCAL_CONFIG_FILE"
+fi
 
 # Set paths
 PKI_DIR="$SCRIPT_DIR/$PKI_DIR_NAME"
@@ -81,8 +89,8 @@ fi
 
 # Generate client certificate
 echo "[INFO] Generating certificate for $CLIENT_NAME..."
-./easyrsa gen-req $CLIENT_NAME nopass
-echo "yes" | ./easyrsa sign-req client $CLIENT_NAME
+./easyrsa gen-req "$CLIENT_NAME" nopass
+echo "yes" | ./easyrsa sign-req client "$CLIENT_NAME"
 
 # Create .ovpn file
 echo "[INFO] Creating $CLIENT_NAME.ovpn..."
@@ -106,14 +114,15 @@ tls-version-min 1.2
 $(cat pki/ca.crt)
 </ca>
 <cert>
-$(cat pki/issued/$CLIENT_NAME.crt)
+$(cat pki/issued/"$CLIENT_NAME".crt)
 </cert>
 <key>
-$(cat pki/private/$CLIENT_NAME.key)
+$(cat pki/private/"$CLIENT_NAME".key)
 </key>
 <tls-auth>
 $(cat ta.key)
 </tls-auth>
+EOF
 
 # Set secure permissions
 chmod 600 "$CLIENT_DIR/${CLIENT_NAME}.ovpn"
